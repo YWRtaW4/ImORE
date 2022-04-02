@@ -1,7 +1,7 @@
 # ImORE
 This is the implementation of the paper sigmaORE: Efficient Order-Revealing Encryption from Sigma Protocols with Map-Invariance Property.
 
-If you have any questions, please contact <congp@whu.edu.cn>
+If you have any questions, please contact <cpeng@whu.edu.cn>
 
 ## Prerequisites ##
 Required environment
@@ -19,11 +19,11 @@ Run the correctness check by
 ``` shell
 # Requires type-d parameter of PBC library as input to generate asymmetric pairing
 ./tests/test_m_ore (or test_p_ore) < location_of_your_pbc_library/pbc-0.5.14/param/d159.param
-``` 
+```
 Run the benchmark by
 ``` shell
 ./tests/time_m_ore (or time_p_ore) < location_of_your_pbc_library/pbc-0.5.14/param/d159.param
-``` 
+```
 
 ## Cash et al.'s scheme, Li et al.'s scheme and Lv et al.'s scheme ##
 We also implemented the scheme of Cash et al. at /cash_scheme, the scheme of Li et al. at /li_scheme and the scheme of Lv et al. at /lv_scheme.
@@ -35,8 +35,8 @@ Run the correctness check by
 cd cash_scheme (or li_scheme, lv_schme)
 make
 ./tests/test_cash_ore (or ./tests/test_li_ore, ./tests/test_lv_ore) < location_of_your_pbc_library/pbc-0.5.14/param/d159.param
-``` 
+```
 Run the benchmark by
 ``` shell
 ./tests/time_cash_ore (or ./tests/time_li_ore, ./tests/time_lv_ore) < location_of_your_pbc_library/pbc-0.5.14/param/d159.param
-``` 
+```
