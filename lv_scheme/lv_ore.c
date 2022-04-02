@@ -1,6 +1,6 @@
 #include "crypto.h"
 #include "errors.h"
-#include "ore.h"
+#include "lv_ore.h"
 
 #include <stdio.h>
 #include <stdlib.h>
