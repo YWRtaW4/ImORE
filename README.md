@@ -28,7 +28,7 @@ Run the benchmark by
 ## Cash et al.'s scheme, Li et al.'s scheme and Lv et al.'s scheme ##
 We also implemented the scheme of Cash et al. at /cash_scheme, the scheme of Li et al. at /li_scheme and the scheme of Lv et al. at /lv_scheme.
 
-See the paper of Cash et al. at [ePrint](https://eprint.iacr.org/2018/698.pdf),  paper of Li et al. at [ACM](https://dl.acm.org/doi/abs/10.1145/3321705.3329829) and paper of Lv et al. at [Springer](https://link.springer.com/chapter/10.1007%2F978-3-030-88428-4_3).
+See the paper of Cash et al. at [Springer](https://link.springer.com/chapter/10.1007/978-3-030-03326-2_7),  paper of Li et al. at [ACM](https://dl.acm.org/doi/abs/10.1145/3321705.3329829) and paper of Lv et al. at [Springer](https://link.springer.com/chapter/10.1007%2F978-3-030-88428-4_3).
 
 Run the correctness check by 
 ``` shell
