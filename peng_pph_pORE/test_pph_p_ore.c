@@ -6,7 +6,7 @@
 
 #define ERR_CHECK(x) if((err = x) != ERROR_NONE) { return err; }
 
-//./tests/test_p_ore < ../library/pbc-0.5.14/param/d159.param
+//./tests/test_pph_p_ore < ../library/pbc-0.5.14/param/d159.param
 static int check_ore(ore_pp* params, int err, char* param, size_t count)
 {
     int nbits = 32; // You can choose 16, 32, 64 etc. MAX nbits = 64.

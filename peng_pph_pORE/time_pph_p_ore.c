@@ -66,7 +66,7 @@ int main(int argc, char **argv)
         }
         double enc_time_elapsed = (double)(clock() - start_time) / CLOCKS_PER_SEC;
         double enc_time = enc_time_elapsed / enc_trials * 1000;
-        byte_len_of_ctxt = element_length_in_bytes(ctxt1.g0)*4 + PRF_OUTPUT_BYTES + element_length_in_bytes(ctxt1.inter_ct[0].z0)*NBITS[i]*2;
+        byte_len_of_ctxt = element_length_in_bytes(ctxt1.g0[0])*4*NBITS[i] + PRF_OUTPUT_BYTES*NBITS[i] + element_length_in_bytes(ctxt1.inter_ct[0].z0)*NBITS[i]*2;
 
         if(NBITS[i] == 64)
         {

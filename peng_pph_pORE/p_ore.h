@@ -43,11 +43,11 @@ typedef struct {
 typedef struct {
     bool initialized;
     int nbits;
-    element_t g0;
-    element_t g1;
-    element_t y0;
-    element_t y1;
-    byte ct0[PRF_OUTPUT_BYTES];
+    element_t g0[PLAINTEXT_BIT];
+    element_t g1[PLAINTEXT_BIT];
+    element_t y0[PLAINTEXT_BIT];
+    element_t y1[PLAINTEXT_BIT];
+    byte ct0[PLAINTEXT_BIT][PRF_OUTPUT_BYTES];
     ore_inter_ctxt inter_ct[PLAINTEXT_BIT];
 } ore_ciphertext;
 

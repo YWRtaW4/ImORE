@@ -96,13 +96,14 @@ int init_ore_ciphertext(ore_ciphertext* ctxt, ore_pp* params)
     int i;
 
     ctxt->nbits = params->nbits;
-    element_init_G1(ctxt->g0, params->pairing);
-    element_init_G1(ctxt->g1, params->pairing);
-    element_init_G1(ctxt->y0, params->pairing);
-    element_init_G1(ctxt->y1, params->pairing);
-    memset(ctxt->ct0, 0, PRF_OUTPUT_BYTES);
+   
     for(i = 0; i < params->nbits; i++)
     {
+        element_init_G1(ctxt->g0[i], params->pairing);
+        element_init_G1(ctxt->g1[i], params->pairing);
+        element_init_G1(ctxt->y0[i], params->pairing);
+        element_init_G1(ctxt->y1[i], params->pairing);
+        memset(ctxt->ct0[i], 0, PRF_OUTPUT_BYTES);
         element_init_Zr(ctxt->inter_ct[i].z0, params->pairing);
         element_init_Zr(ctxt->inter_ct[i].z1, params->pairing);
     }
@@ -169,7 +170,8 @@ int ore_enc(ore_ciphertext* ctxt, ore_master_secret_key* msk, uint64_t msg, ore_
     }
 
     int i;
-    element_t xi, r0, r1, w, tmp;
+    element_t w, tmp, r0, r1, xi;
+    // element_t xi, random[PLAINTEXT_BIT*2];
     element_t u[PLAINTEXT_BIT*2];//u0 u1
     byte key_byte[PRF_OUTPUT_BYTES];
     byte u_byte[PRF_OUTPUT_BYTES];
@@ -185,27 +187,20 @@ int ore_enc(ore_ciphertext* ctxt, ore_master_secret_key* msk, uint64_t msg, ore_
     memset(z0_byte, 0, z_byte_length);
     byte* z1_byte = (byte *)malloc(sizeof(byte)*z_byte_length);
     memset(z1_byte, 0, z_byte_length);
-    int r_byte_length = element_length_in_bytes(msk->r);
-    byte* hash2_input = (byte *)malloc(z_byte_length*(1+2*params->nbits));//r||(z0 z1)*n
-    memset(hash2_input, 0, z_byte_length*(1+2*params->nbits));
+    byte* hash2_input = (byte *)malloc(z_byte_length*3);//r||(z0 z1)*n
+    memset(hash2_input, 0, z_byte_length*3);
 
     int g_byte_length = element_length_in_bytes(params->g);
     int size = g_byte_length+PRF_OUTPUT_BYTES;
-    byte* hash1_input = (byte *)malloc(size*2*params->nbits);
-    memset(hash1_input, 0, size*2*params->nbits);
+    byte* hash1_input = (byte *)malloc(size*2);
+    memset(hash1_input, 0, size*2);
 
     memset(r_byte, 0, sizeof(r_byte));
     element_to_bytes(r_byte, msk->r);
-    memcpy(hash2_input, r_byte, r_byte_length);
+    memcpy(hash2_input, r_byte, z_byte_length);
 
     byte* w_byte = (byte *)malloc(sizeof(byte)*g_byte_length);
     memset(w_byte, 0, g_byte_length);
-
-    element_init_Zr(xi, params->pairing);
-    element_init_Zr(r0, params->pairing);
-    element_init_Zr(r1, params->pairing);
-    element_random(r0);
-    element_random(r1);
 
     rand_permute *permute = (rand_permute *)malloc(sizeof(rand_permute)*params->nbits);
     for(i = 0; i < params->nbits; i++)
@@ -215,12 +210,11 @@ int ore_enc(ore_ciphertext* ctxt, ore_master_secret_key* msk, uint64_t msg, ore_
     }
     qsort(permute, params->nbits, sizeof(permute), comp);
 
-    element_pow_zn(ctxt->g1, params->g, r0);//g1^ = g_pow_r0
-    element_pow_zn(ctxt->g0, params->g, r1);//g0^ = g_pow_r1
-    element_pow_zn(ctxt->y1, msk->y1, r0);//y1^ = y1_pow_r0
-    element_pow_zn(ctxt->y0, msk->y0, r1);//y0^ = y0_pow_r1
     element_init_G1(w, params->pairing);
     element_init_Zr(tmp, params->pairing);
+    element_init_Zr(xi, params->pairing);
+    element_init_Zr(r0, params->pairing);
+    element_init_Zr(r1, params->pairing);
 
     for(i = 0; i < params->nbits; i++)
     {
@@ -237,56 +231,62 @@ int ore_enc(ore_ciphertext* ctxt, ore_master_secret_key* msk, uint64_t msg, ore_
 
     for(i = 0; i < params->nbits; i++)
     {
+        element_random(r0);
+        element_random(r1);
+
+        element_pow_zn(ctxt->g1[i], params->g, r0);//g1^ = g_pow_r0
+        element_pow_zn(ctxt->g0[i], params->g, r1);//g0^ = g_pow_r1
+        element_pow_zn(ctxt->y1[i], msk->y1, r0);//y1^ = y1_pow_r0
+        element_pow_zn(ctxt->y0[i], msk->y0, r1);//y0^ = y0_pow_r1
+
         encode(u_byte, key_byte, (byte *)&msg, sizeof(msg), permute[i].index, params->nbits);//sigma(s,m,pi(i))
         mpz_import(mpz_u, 32, 1, 1, -1, 0, u_byte);
 
         HMAC_SHA256(u_opr_one_byte, SHA256_OUTPUT_BYTES, key_byte, u_byte, PRF_OUTPUT_BYTES); //u_{i,0}
         element_from_bytes(u[i*2], u_opr_one_byte);
-        memcpy(hash1_input+i*2*size, u_opr_one_byte, PRF_OUTPUT_BYTES);
+        memcpy(hash1_input, u_opr_one_byte, PRF_OUTPUT_BYTES);
         element_from_bytes(u_opr_one, u_opr_one_byte);
-        element_pow_zn(w, ctxt->g1, u_opr_one);//Com(rnd_{i,0}) = g^(r0*u_{i,0})
+        element_pow_zn(w, ctxt->g1[i], u_opr_one);//Com(rnd_{i,0}) = g^(r0*u_{i,0})
         element_to_bytes(w_byte, w);
-        memcpy(hash1_input+i*2*size+PRF_OUTPUT_BYTES, w_byte, g_byte_length);
+        memcpy(hash1_input+PRF_OUTPUT_BYTES, w_byte, g_byte_length);
 
         mpz_add_ui(mpz_u, mpz_u, 1); //u+1
         mpz_export(u_byte, NULL, 1, 1, -1, 0, mpz_u);
         HMAC_SHA256(u_opr_one_byte, SHA256_OUTPUT_BYTES, key_byte, u_byte, PRF_OUTPUT_BYTES); //u_{i,1}
         element_from_bytes(u[i*2+1], u_opr_one_byte);
-        memcpy(hash1_input+(2*i+1)*size, u_opr_one_byte, PRF_OUTPUT_BYTES);
+        memcpy(hash1_input+size, u_opr_one_byte, PRF_OUTPUT_BYTES);
         element_from_bytes(u_opr_one, u_opr_one_byte);
-        element_pow_zn(w, ctxt->g0, u_opr_one);
+        element_pow_zn(w, ctxt->g0[i], u_opr_one);
         element_to_bytes(w_byte, w);//Com(rnd_{i,1})
-        memcpy(hash1_input+(2*i+1)*size+PRF_OUTPUT_BYTES, w_byte, g_byte_length);
-    }
+        memcpy(hash1_input+size+PRF_OUTPUT_BYTES, w_byte, g_byte_length);
 
-    sha_256(xi_byte, SHA256_OUTPUT_BYTES, hash1_input, size*2*params->nbits);//Hc(u||w)
-    element_from_bytes(xi, xi_byte);//xi
+        sha_256(xi_byte, SHA256_OUTPUT_BYTES, hash1_input, size*2);//Hc(u||w)
+        element_from_bytes(xi, xi_byte);//xi
 
-    for(i = 0; i < params->nbits; i++)//c_{i,k} = Rsp() = st_{i,k} - sk_k*xi
-    {
         element_mul(tmp, xi, msk->x0);//xi*x0
         element_mul(ctxt->inter_ct[i].z0, u[i*2], r0);//st_{i,0} = r0*u_{i,0} = rnd_{i,0}
         element_sub(ctxt->inter_ct[i].z0, ctxt->inter_ct[i].z0, tmp);//z_{i,0} = r0*u_{i,0} - xi*x0
         element_to_bytes(z0_byte, ctxt->inter_ct[i].z0);
-        memcpy(hash2_input+r_byte_length+i*2*z_byte_length, z0_byte, z_byte_length);
+        memcpy(hash2_input+z_byte_length, z0_byte, z_byte_length);
 
         element_mul(tmp, xi, msk->x1);
         element_mul(ctxt->inter_ct[i].z1, u[i*2+1], r1);
         element_sub(ctxt->inter_ct[i].z1, ctxt->inter_ct[i].z1, tmp);//z_{i,1} = r1*u_{i,1} - xi*x1
         element_to_bytes(z1_byte, ctxt->inter_ct[i].z1);
-        memcpy(hash2_input+r_byte_length+(2*i+1)*z_byte_length, z1_byte, z_byte_length);
-    }
+        memcpy(hash2_input+2*z_byte_length, z1_byte, z_byte_length);
 
-    sha_256(hc_byte, SHA256_OUTPUT_BYTES, hash2_input, r_byte_length + z_byte_length*2*params->nbits);//Hc(k||c1||...||cn)
-    for (i = 0; i < SHA256_OUTPUT_BYTES; i++) {
-			ctxt->ct0[i] = xi_byte[i] ^ hc_byte[i];//c0 = xi^Hc(k||c1||...||cn)
-	}
+        sha_256(hc_byte, SHA256_OUTPUT_BYTES, hash2_input, z_byte_length*3);//Hc(k||zi0||zi1)
+        for (int j = 0; j < SHA256_OUTPUT_BYTES; j++) {
+			ctxt->ct0[i][j] = xi_byte[j] ^ hc_byte[j];//xi^ = xi^Hc(k||zi0||zi1)
+	    }
+
+    }
     
+    element_clear(w);
+    element_clear(tmp);
     element_clear(xi);
     element_clear(r0);
     element_clear(r1);
-    element_clear(w);
-    element_clear(tmp);
     for(i = 0; i < params->nbits; i++)
     {
         element_clear(u[2*i]);
@@ -319,11 +319,8 @@ int ore_enc(ore_ciphertext* ctxt, ore_master_secret_key* msk, uint64_t msg, ore_
  */
 int ore_cmp(int* b, ore_ciphertext* ctxt1, ore_ciphertext* ctxt2, ore_cmp_key* ck, ore_pp* params)
 {
-    element_t v0[params->nbits];
-    element_t v1[params->nbits];
-    element_t v0_prime[params->nbits];
-    element_t v1_prime[params->nbits];
-    element_t tmp, xi, xi_prime;
+    element_t v0, v1, v0_prime, v1_prime;
+    element_t tmp, xi[params->nbits], xi_prime[params->nbits];
     bool break_flag = false;
     int i, j, bit;
     byte hc_byte[SHA256_OUTPUT_BYTES];
@@ -336,86 +333,82 @@ int ore_cmp(int* b, ore_ciphertext* ctxt1, ore_ciphertext* ctxt2, ore_cmp_key* c
     memset(z0_byte, 0, z_byte_length);
     byte* z1_byte = (byte *)malloc(sizeof(byte)*z_byte_length);
     memset(z1_byte, 0, z_byte_length);
-    int r_byte_length = element_length_in_bytes(ck->r);
-    byte* hash1_input = (byte *)malloc(r_byte_length + z_byte_length*2*params->nbits);//r||(z0 z1)*n
-    memset(hash1_input, 0, r_byte_length + z_byte_length*2*params->nbits);
+    byte* hash1_input = (byte *)malloc(z_byte_length*3);//r||(z0 z1)*n
+    memset(hash1_input, 0, z_byte_length*3);
+    byte* hash2_input = (byte *)malloc(z_byte_length*3);//r||(z0 z1)*n
+    memset(hash2_input, 0, z_byte_length*3);
 
     byte r_byte[PRF_OUTPUT_BYTES];
     memset(r_byte, 0, sizeof(r_byte));
     element_to_bytes(r_byte, ck->r);
-    memcpy(hash1_input, r_byte, r_byte_length);
+    memcpy(hash1_input, r_byte, z_byte_length);
+    memcpy(hash2_input, r_byte, z_byte_length);
 
-    //xi
+    element_init_G1(tmp, params->pairing);
+    element_init_G1(v0, params->pairing);
+    element_init_G1(v1, params->pairing);
+    element_init_G1(v0_prime, params->pairing);
+    element_init_G1(v1_prime, params->pairing);
+    
+    for(i = 0; i < params->nbits; i++)
+    {
+        element_init_Zr(xi[i], params->pairing);
+        element_init_Zr(xi_prime[i], params->pairing);
+    }
+
     for(i = 0; i < params->nbits; i++){
         element_to_bytes(z0_byte, ctxt1->inter_ct[i].z0);
         element_to_bytes(z1_byte, ctxt1->inter_ct[i].z1);
-        memcpy(hash1_input+r_byte_length+i*2*z_byte_length, z0_byte, z_byte_length);
-        memcpy(hash1_input+r_byte_length+(2*i+1)*z_byte_length, z1_byte, z_byte_length);
-    }
+        memcpy(hash1_input+z_byte_length, z0_byte, z_byte_length);
+        memcpy(hash1_input+2*z_byte_length, z1_byte, z_byte_length);//k||zi0||zi1
 
-    sha_256(hc_byte, SHA256_OUTPUT_BYTES, hash1_input, r_byte_length + z_byte_length*2*params->nbits);//Hc(k||c1||...||cn)
-
-    for (i = 0; i < SHA256_OUTPUT_BYTES; i++) {
-		xi_byte[i] = ctxt1->ct0[i] ^ hc_byte[i];//xi = c0^Hc(k||c1||...||cn)
-	}
-
-    //xi'
-    memset(hash1_input+r_byte_length, 0, z_byte_length*2*params->nbits);
-    for(i = 0; i < params->nbits; i++){
         element_to_bytes(z0_byte, ctxt2->inter_ct[i].z0);
         element_to_bytes(z1_byte, ctxt2->inter_ct[i].z1);
-        memcpy(hash1_input+r_byte_length+i*2*z_byte_length, z0_byte, z_byte_length);
-        memcpy(hash1_input+r_byte_length+(2*i+1)*z_byte_length, z1_byte, z_byte_length);
-    }
-    sha_256(hc_prime_byte, SHA256_OUTPUT_BYTES, hash1_input, r_byte_length + z_byte_length*2*params->nbits);//Hc(k||c1||...||cn)
+        memcpy(hash2_input+z_byte_length, z0_byte, z_byte_length);
+        memcpy(hash2_input+2*z_byte_length, z1_byte, z_byte_length);//k||zi0||zi1
 
-    for (i = 0; i < SHA256_OUTPUT_BYTES; i++) {
-            xi_prime_byte[i] = ctxt2->ct0[i] ^ hc_prime_byte[i];//xi' = c0^Hc(k||c1||...||cn)
+        sha_256(hc_byte, SHA256_OUTPUT_BYTES, hash1_input, z_byte_length*3);//Hc(k||zi0||zi1)
+        for (int j = 0; j < SHA256_OUTPUT_BYTES; j++) {
+		xi_byte[j] = ctxt1->ct0[i][j] ^ hc_byte[j];//xi = c0^Hc(k||zi0||zi1)
+        }
+
+        sha_256(hc_prime_byte, SHA256_OUTPUT_BYTES, hash1_input, z_byte_length*3);//Hc(k||zi0'||zi1')
+        for (int j = 0; j < SHA256_OUTPUT_BYTES; j++) {
+		xi_prime_byte[j] = ctxt2->ct0[i][j] ^ hc_prime_byte[j];//xi' = c0^Hc(k||zi0||zi1)
+        }
+
+        element_from_bytes(xi[i], xi_byte);//xi
+        element_from_bytes(xi_prime[i], xi_prime_byte);//xi'
 	}
 
-    for(i = 0; i < params->nbits; i++)
-    {
-        element_init_G1(v0[i], params->pairing);
-        element_init_G1(v1[i], params->pairing);
-        element_init_G1(v0_prime[i], params->pairing);
-        element_init_G1(v1_prime[i], params->pairing);
-    }
-    element_init_G1(tmp, params->pairing);
-    element_init_Zr(xi, params->pairing);
-    element_init_Zr(xi_prime, params->pairing);
-    element_from_bytes(xi, xi_byte);//xi
-    element_from_bytes(xi_prime, xi_prime_byte);//xi'
-
-    for(i = 0; i < params->nbits; i++)
-    {
-        element_pow_zn(v0[i], ctxt2->g0, ctxt1->inter_ct[i].z0);//g0'^(z_{i,0})
-        element_pow_zn(tmp, ctxt2->y0, xi);//y0'^xi
-        element_mul(v0[i], v0[i], tmp);//rec_{i,0} = g0'^(z_{i,0})*y0'^xi
-
-        element_pow_zn(v1[i], ctxt2->g1, ctxt1->inter_ct[i].z1);//g1'^(z_{i,1})
-        element_pow_zn(tmp, ctxt2->y1, xi);//y1'^xi
-        element_mul(v1[i], v1[i], tmp);//rec_{i,1} = g1'^(z_{i,1})*y1'^xi
-
-        element_pow_zn(v0_prime[i], ctxt1->g0, ctxt2->inter_ct[i].z0);//g0^(z'_{i,0})
-        element_pow_zn(tmp, ctxt1->y0, xi_prime);//y0^xi'
-        element_mul(v0_prime[i], v0_prime[i], tmp);//rec'_{i,0}
-
-        element_pow_zn(v1_prime[i], ctxt1->g1, ctxt2->inter_ct[i].z1);//g1^(z'_{i,1})
-        element_pow_zn(tmp, ctxt1->y1, xi_prime);//y1^xi'
-        element_mul(v1_prime[i], v1_prime[i], tmp);//rec'_{i,1}
-    }
 
     for(i = 0; i < params->nbits; i++)
     {
         for(j = 0; j < params->nbits; j++)
         {
-            if(element_cmp(v0[i], v1_prime[j]) == 0)//?rec_{i,0} == rec'_{j,1}
+            element_pow_zn(v0, ctxt2->g0[j], ctxt1->inter_ct[i].z0);//g_{j,0}'^(z_{i,0})
+            element_pow_zn(tmp, ctxt2->y0[j], xi[i]);//y_{j,0}'^xi
+            element_mul(v0, v0, tmp);//rec_{i,0} = g0'^(z_{i,0})*y0'^xi
+
+            element_pow_zn(v1_prime, ctxt1->g1[i], ctxt2->inter_ct[j].z1);//g_{i,1}^(z'_{j,1})
+            element_pow_zn(tmp, ctxt1->y1[i], xi_prime[j]);//y_{i,1}^xj'
+            element_mul(v1_prime, v1_prime, tmp);//rec'_{j,1}
+
+            element_pow_zn(v1, ctxt2->g1[j], ctxt1->inter_ct[i].z1);//g_{j,1}'^(z_{i,1})
+            element_pow_zn(tmp, ctxt2->y1[j], xi[i]);//y_{j,1}'^xi
+            element_mul(v1, v1, tmp);//rec_{i,1} = g1'^(z_{i,1})*y1'^xi
+
+            element_pow_zn(v0_prime, ctxt1->g0[i], ctxt2->inter_ct[j].z0);//g_{i,0}^(z'_{j,0})
+            element_pow_zn(tmp, ctxt1->y0[i], xi_prime[j]);//y_{i,0}^xj'
+            element_mul(v0_prime, v0_prime, tmp);//rec'_{j,0}
+
+            if(element_cmp(v0, v1_prime) == 0)//?rec_{i,0} == rec'_{j,1}
             {
                 bit = 1;
                 break_flag = true;
                 break;
             }
-            else if(element_cmp(v1[i], v0_prime[j]) == 0)//?rec_{i,1} == rec'_{j,0}
+            else if(element_cmp(v1, v0_prime) == 0)//?rec_{i,1} == rec'_{j,0}
             {
                 bit = -1;
                 break_flag = true;
@@ -434,15 +427,16 @@ int ore_cmp(int* b, ore_ciphertext* ctxt1, ore_ciphertext* ctxt2, ore_cmp_key* c
 
     for(i = 0; i < params->nbits; i++)
     {
-        element_clear(v0[i]);
-        element_clear(v1[i]);
-        element_clear(v0_prime[i]);
-        element_clear(v1_prime[i]);
+        element_clear(xi[i]);
+        element_clear(xi_prime[i]);
     }
     element_clear(tmp);
-    element_clear(xi);
-    element_clear(xi_prime);
+    element_clear(v0);
+    element_clear(v1);
+    element_clear(v0_prime);
+    element_clear(v1_prime);
     free(hash1_input);
+    free(hash2_input);
     free(z0_byte);
     free(z1_byte);
 
@@ -492,12 +486,12 @@ int clear_ore_ciphertext(ore_ciphertext* ctxt)
 
     int i;
 
-    element_clear(ctxt->g0);
-    element_clear(ctxt->g1);
-    element_clear(ctxt->y0);
-    element_clear(ctxt->y1);
     for(i = 0; i < ctxt->nbits; i++)
     {
+        element_clear(ctxt->g0[i]);
+        element_clear(ctxt->g1[i]);
+        element_clear(ctxt->y0[i]);
+        element_clear(ctxt->y1[i]);
         element_clear(ctxt->inter_ct[i].z0);
         element_clear(ctxt->inter_ct[i].z1);
     }
